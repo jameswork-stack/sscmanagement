@@ -1,0 +1,80 @@
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap');
+
+:root {
+  --coffee-dark: #493323;
+  --coffee-primary: #6F4E37;
+  --coffee-medium: #8B6548;
+  --coffee-light: #A67C52;
+
+  --cream: #F5EFE6;
+  --latte: #E7D8C5;
+  --white: #FFFFFF;
+
+  --text-dark: #38291F;
+  --text-muted: #8B8178;
+
+  --border: #E9DFD3;
+  --background: #FAF7F2;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--background);
+  color: var(--text-dark);
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  text-decoration: none;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.page-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 30px;
+  color: var(--coffee-dark);
+  margin-bottom: 10px;
+}
+
+html {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  .page-container {
+    width: 100%;
+  }
+
+  input,
+  button {
+    max-width: 100%;
+  }
+}
