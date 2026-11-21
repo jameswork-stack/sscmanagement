@@ -3,19 +3,19 @@ import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
-  query,
-  where,
   onSnapshot,
   addDoc,
   doc,
   updateDoc,
   serverTimestamp,
-  getDoc,
 } from "firebase/firestore";
 import { auth, db } from "../firebase/firebase";
 import "./AttendanceLog.css";
 
 const PH_TIMEZONE = "Asia/Manila";
+
+const normalizeEmployeeName = (name) =>
+  String(name || "").trim().toLocaleLowerCase();
 
 const formatPH = (date, options) =>
   new Intl.DateTimeFormat("en-PH", {
@@ -42,9 +42,11 @@ const formatDate = (date) =>
 export default function AttendanceLog() {
   const [user, setUser] = useState(null);
   const [employeeName, setEmployeeName] = useState("");
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [nameInputFocused, setNameInputFocused] = useState(false);
+  const [pendingAction, setPendingAction] = useState("");
   const [now, setNow] = useState(new Date());
 
-  const [activeAttendance, setActiveAttendance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -59,14 +61,15 @@ export default function AttendanceLog() {
     return () => clearInterval(timer);
   }, []);
 
-  // Read logged-in account and credential name
+  // Read the logged-in account without using account details as the employee name
   useEffect(() => {
-    let current = true;
-
-    const unsubscribe = onAuthStateChanged(auth, async (account) => {
+    const unsubscribe = onAuthStateChanged(auth, (account) => {
       setUser(account);
       setEmployeeName("");
-      setLoading(true);
+      setAttendanceRecords([]);
+      setNameInputFocused(false);
+      setPendingAction("");
+      setLoading(Boolean(account));
 
       if (!account) {
         setError("Please log in to access attendance.");
@@ -75,68 +78,24 @@ export default function AttendanceLog() {
       }
 
       setError("");
-
-      try {
-        const userDoc = await getDoc(doc(db, "users", account.uid));
-
-        if (!current) return;
-
-        const data = userDoc.exists() ? userDoc.data() : {};
-
-        setEmployeeName(
-          data.name ||
-          data.fullName ||
-          data.displayName ||
-          account.displayName ||
-          account.email ||
-          "Employee"
-        );
-      } catch (err) {
-        if (!current) return;
-        console.error("Account loading error:", err);
-        setEmployeeName(
-          account.displayName || account.email || "Employee"
-        );
-      }
     });
 
-    return () => {
-      current = false;
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
-  // Detect active time-in record for this account
+  // Load attendance records for employee suggestions and active sessions
   useEffect(() => {
-    if (!user) {
-      setActiveAttendance(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    const attendanceQuery = query(
-      collection(db, "attendance"),
-      where("userId", "==", user.uid)
-    );
+    if (!user) return;
 
     const unsubscribe = onSnapshot(
-      attendanceQuery,
+      collection(db, "attendance"),
       (snapshot) => {
-        const activeRecords = snapshot.docs
-          .map((item) => ({
+        setAttendanceRecords(
+          snapshot.docs.map((item) => ({
             id: item.id,
             ...item.data(),
           }))
-          .filter((item) => item.status === "TIME_IN")
-          .sort(
-            (a, b) =>
-              (b.timeIn?.toMillis?.() || 0) -
-              (a.timeIn?.toMillis?.() || 0)
-          );
-
-        setActiveAttendance(activeRecords[0] || null);
+        );
         setLoading(false);
         setError("");
       },
@@ -150,8 +109,27 @@ export default function AttendanceLog() {
     return () => unsubscribe();
   }, [user]);
 
+  const openNameForm = (action) => {
+    setEmployeeName("");
+    setNameInputFocused(false);
+    setPendingAction(action);
+    setError("");
+    setSuccess("");
+  };
+
   const handleTimeIn = async () => {
-    if (!user || loading || saving || activeAttendance) return;
+    if (!user || loading || saving) return;
+
+    const name = employeeName.trim();
+    if (!name) {
+      setError("Enter an employee name to record attendance.");
+      return;
+    }
+
+    if (activeAttendance) {
+      setError(`${name} is already timed in.`);
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -161,7 +139,7 @@ export default function AttendanceLog() {
       // A new record for every time-in/time-out session
       await addDoc(collection(db, "attendance"), {
         userId: user.uid,
-        employeeName: employeeName || user.email || "Employee",
+        employeeName: name,
         email: user.email || "",
         timeIn: serverTimestamp(),
         timeOut: null,
@@ -170,6 +148,7 @@ export default function AttendanceLog() {
       });
 
       setSuccess("Time In recorded successfully.");
+      setPendingAction("");
     } catch (err) {
       console.error("Time In error:", err);
       setError(err.message || "Failed to record Time In.");
@@ -179,7 +158,18 @@ export default function AttendanceLog() {
   };
 
   const handleTimeOut = async () => {
-    if (!user || loading || saving || !activeAttendance) return;
+    if (!user || loading || saving) return;
+
+    const name = employeeName.trim();
+    if (!name) {
+      setError("Enter an employee name to record attendance.");
+      return;
+    }
+
+    if (!activeAttendance) {
+      setError(`No active Time In record found for ${name}.`);
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -189,12 +179,14 @@ export default function AttendanceLog() {
       await updateDoc(
         doc(db, "attendance", activeAttendance.id),
         {
+          employeeName: name,
           timeOut: serverTimestamp(),
           status: "TIME_OUT",
         }
       );
 
       setSuccess("Time Out recorded successfully.");
+      setPendingAction("");
     } catch (err) {
       console.error("Time Out error:", err);
       setError(err.message || "Failed to record Time Out.");
@@ -203,7 +195,44 @@ export default function AttendanceLog() {
     }
   };
 
-  const isTimedIn = Boolean(activeAttendance);
+  const activeRecords = attendanceRecords.filter(
+    (record) => record.status === "TIME_IN"
+  );
+  const activeAttendance = activeRecords
+    .filter(
+      (record) =>
+        normalizeEmployeeName(record.employeeName) ===
+        normalizeEmployeeName(employeeName)
+    )
+    .sort(
+      (a, b) =>
+        (b.timeIn?.toMillis?.() || 0) - (a.timeIn?.toMillis?.() || 0)
+    )[0] || null;
+  const isTimedIn = activeRecords.length > 0;
+  const savedNames = [
+    ...new Set(
+      attendanceRecords
+        .map((record) => String(record.employeeName || "").trim())
+        .filter(Boolean)
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+  const suggestedNames =
+    pendingAction === "TIME_OUT"
+      ? [
+          ...new Set(
+            activeRecords
+              .map((record) => String(record.employeeName || "").trim())
+              .filter(Boolean)
+          ),
+        ]
+      : savedNames;
+  const matchingNames = suggestedNames
+    .filter((name) =>
+      normalizeEmployeeName(name).includes(normalizeEmployeeName(employeeName))
+    )
+    .slice(0, 8);
+  const showNameSuggestions =
+    nameInputFocused && matchingNames.length > 0;
 
   return (
     <div className="attendance-page">
@@ -220,8 +249,10 @@ export default function AttendanceLog() {
         </div>
 
         <div className="attendance-employee">
-          <span>Employee</span>
-          <strong>{employeeName || "Loading account..."}</strong>
+          <span>Employee Name</span>
+          <strong>
+            {employeeName || "Enter a name when recording attendance"}
+          </strong>
         </div>
 
         <div className="attendance-status">
@@ -230,7 +261,9 @@ export default function AttendanceLog() {
             {loading
               ? "Loading..."
               : isTimedIn
-              ? "Currently Timed In"
+              ? `${activeRecords.length} ${
+                  activeRecords.length === 1 ? "employee" : "employees"
+                } currently timed in`
               : "Ready to Time In"}
           </strong>
         </div>
@@ -246,33 +279,110 @@ export default function AttendanceLog() {
           <div className="attendance-success">{success}</div>
         )}
 
-        <div className="attendance-buttons">
-          <button
-            type="button"
-            className="attendance-timein"
-            onClick={handleTimeIn}
-            disabled={
-              !user || loading || saving || isTimedIn
-            }
+        {pendingAction ? (
+          <form
+            className="attendance-name-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (pendingAction === "TIME_IN") {
+                handleTimeIn();
+              } else {
+                handleTimeOut();
+              }
+            }}
           >
-            {saving ? "Processing..." : "Time In"}
-          </button>
+            <label htmlFor="attendance-employee-name">
+              Employee Name
+            </label>
+            <div className="attendance-name-input-wrap">
+              <input
+                id="attendance-employee-name"
+                type="text"
+                autoComplete="off"
+                placeholder="Enter employee name"
+                value={employeeName}
+                onChange={(event) => setEmployeeName(event.target.value)}
+                onFocus={() => setNameInputFocused(true)}
+                onBlur={() => setNameInputFocused(false)}
+                aria-autocomplete="list"
+                aria-expanded={showNameSuggestions}
+                aria-controls="attendance-name-suggestions"
+                required
+              />
+              {showNameSuggestions && (
+                <ul
+                  id="attendance-name-suggestions"
+                  className="attendance-name-suggestions"
+                  role="listbox"
+                >
+                  {matchingNames.map((name) => (
+                    <li key={name} role="option" aria-selected="false">
+                      <button
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setEmployeeName(name);
+                          setNameInputFocused(false);
+                        }}
+                      >
+                        {name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="attendance-buttons">
+              <button
+                type="submit"
+                className={
+                  pendingAction === "TIME_IN"
+                    ? "attendance-timein"
+                    : "attendance-timeout"
+                }
+                disabled={!user || loading || saving}
+              >
+                {saving
+                  ? "Processing..."
+                  : pendingAction === "TIME_IN"
+                  ? "Confirm Time In"
+                  : "Confirm Time Out"}
+              </button>
+              <button
+                type="button"
+                className="attendance-cancel"
+                onClick={() => setPendingAction("")}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="attendance-buttons">
+            <button
+              type="button"
+              className="attendance-timein"
+              onClick={() => openNameForm("TIME_IN")}
+              disabled={!user || loading || saving}
+            >
+              Time In
+            </button>
 
-          <button
-            type="button"
-            className="attendance-timeout"
-            onClick={handleTimeOut}
-            disabled={
-              !user || loading || saving || !isTimedIn
-            }
-          >
-            {saving ? "Processing..." : "Time Out"}
-          </button>
-        </div>
+            <button
+              type="button"
+              className="attendance-timeout"
+              onClick={() => openNameForm("TIME_OUT")}
+              disabled={!user || loading || saving || !isTimedIn}
+            >
+              Time Out
+            </button>
+          </div>
+        )}
 
         <p className="attendance-note">
           After Time Out, you can start another attendance session.
-          All records are saved under your logged-in account.
+          Enter the employee name to save it with the attendance record.
         </p>
       </div>
     </div>

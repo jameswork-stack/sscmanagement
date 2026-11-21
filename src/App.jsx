@@ -18,6 +18,7 @@ import Expense from "./pages/Expense";
 import AttendanceLog from "./pages/AttendanceLog";
 import AttendanceRecord from "./pages/AttendanceRecord";
 import Product from "./pages/Product";
+import PWAInstall from "./components/PWAInstall";
 
 // Redirect users depending on their role
 function HomeRedirect() {
@@ -54,6 +55,16 @@ function GuestRoute() {
       />
     );
   }
+
+  function App() {
+  return (
+    <>
+      {/* Your existing routes and components */}
+
+      <PWAInstall />
+    </>
+  );
+}
 
   return <Login />;
 }

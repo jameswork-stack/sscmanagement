@@ -102,6 +102,69 @@
   margin-top: 25px;
 }
 
+.attendance-name-form {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 24px;
+}
+
+.attendance-name-form > label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #665548;
+}
+
+.attendance-name-input-wrap {
+  position: relative;
+}
+
+.attendance-name-input-wrap input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #e5dcd2;
+  border-radius: 8px;
+  outline: none;
+  color: #493323;
+  font: inherit;
+}
+
+.attendance-name-input-wrap input:focus {
+  border-color: #6f4e37;
+}
+
+.attendance-name-suggestions {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 190px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e9dfd3;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(73, 51, 35, 0.12);
+}
+
+.attendance-name-suggestions button {
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #493323;
+  text-align: left;
+  cursor: pointer;
+}
+
+.attendance-name-suggestions button:hover {
+  background: #f7f2ed;
+}
+
 .attendance-buttons button {
   padding: 16px;
   border: none;
@@ -120,6 +183,11 @@
 .attendance-timeout {
   background: #493323;
   color: white;
+}
+
+.attendance-cancel {
+  background: #f3ebe2;
+  color: #493323;
 }
 
 .attendance-buttons button:hover:not(:disabled) {
