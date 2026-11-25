@@ -367,3 +367,38 @@
     width: 100%;
   }
 }
+
+/* CART ORDER TYPE */
+
+.pos-order-type {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #493323;
+}
+
+.pos-order-type select {
+  width: 115px;
+  max-width: 100%;
+  padding: 7px 8px;
+  border: 1px solid #d9cec5;
+  border-radius: 6px;
+  background: #faf7f4;
+  color: #493323;
+  font-size: 12px;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+}
+
+.pos-order-type select:focus {
+  border-color: #493323;
+}
+
+.pos-order-type select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

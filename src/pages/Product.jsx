@@ -129,6 +129,7 @@ export default function Product() {
             itemName: item.itemName,
             quantityType: item.quantityType || "pcs",
             quantity: "",
+            excludeWhenDineIn: false,
             },
         ]);
 
@@ -224,6 +225,7 @@ const handleEditProduct = (product) => {
       itemName: ingredient.itemName,
       quantityType: ingredient.quantityType || "pcs",
       quantity: String(ingredient.quantity ?? ""),
+      excludeWhenDineIn: ingredient.excludeWhenDineIn === true,
     }))
   );
 
@@ -301,6 +303,7 @@ const handleRemoveProduct = async (product) => {
         itemName: ingredient.itemName,
         quantityType: ingredient.quantityType,
         quantity: Number(ingredient.quantity),
+        excludeWhenDineIn: ingredient.excludeWhenDineIn === true,
         })),
         updatedAt: serverTimestamp(),
     };
@@ -468,6 +471,7 @@ const handleRemoveProduct = async (product) => {
                           ? product.ingredients.map((ingredient) => (
                               <span key={ingredient.id}>
                                 {ingredient.itemName}
+                                {ingredient.excludeWhenDineIn === true && " (Take Out only)"}
                                 {ingredient.quantity != null &&
                                     ingredient.quantity !== "" &&
                                     ` - ${ingredient.quantity} ${ingredient.quantityType}`}
@@ -696,6 +700,21 @@ const handleRemoveProduct = async (product) => {
                             <small>
                             Enter required quantity per product
                             </small>
+                            <label className="ingredient-dine-in-option">
+                              <input type="checkbox"
+                                checked={ingredient.excludeWhenDineIn === true}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setSelectedIngredients((prev) => prev.map((entry) =>
+                                    entry.id === ingredient.id
+                                      ? { ...entry, excludeWhenDineIn: checked }
+                                      : entry
+                                  ));
+                                }}
+                                disabled={saving}
+                              />
+                              Exclude when Dine In
+                            </label>
                         </div>
 
                         <div className="ingredient-quantity-control">

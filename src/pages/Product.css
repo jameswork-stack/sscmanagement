@@ -754,4 +754,27 @@
   }
 }
 
+/* EXCLUDE INGREDIENT WHEN DINE IN */
+
+.ingredient-info .ingredient-dine-in-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #493323;
+  cursor: pointer;
+}
+
+.ingredient-dine-in-option input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
+  margin: 0;
+  padding: 0;
+  accent-color: #493323;
+  cursor: pointer;
+}
+
 

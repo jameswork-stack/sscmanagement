@@ -75,12 +75,12 @@ export default function POS() {
 
     setCart((previous) => {
       const existing = previous.find(
-        (item) => item.id === product.id
+        (item) => item.id === product.id && item.orderType === "Take Out"
       );
 
       if (existing) {
         return previous.map((item) =>
-          item.id === product.id
+          item.cartId === existing.cartId
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
@@ -90,6 +90,8 @@ export default function POS() {
         ...previous,
         {
           id: product.id,
+          cartId: `${product.id}:Take Out`,
+          orderType: "Take Out",
           productName: product.productName,
           price: Number(product.price),
           quantity: 1,
@@ -102,7 +104,7 @@ export default function POS() {
     setCart((previous) =>
       previous
         .map((item) =>
-          item.id === id
+          item.cartId === id
             ? {
                 ...item,
                 quantity: Math.max(0, item.quantity + change),
@@ -116,8 +118,28 @@ export default function POS() {
 
   const removeFromCart = (id) => {
     setCart((previous) =>
-      previous.filter((item) => item.id !== id)
+      previous.filter((item) => item.cartId !== id)
     );
+    setSuccess("");
+  };
+
+  const changeOrderType = (cartId, orderType) => {
+    setCart((previous) => {
+      const source = previous.find((item) => item.cartId === cartId);
+      if (!source || source.orderType === orderType) return previous;
+      const targetId = `${source.id}:${orderType}`;
+      const target = previous.find((item) => item.cartId === targetId);
+      if (target) {
+        return previous.filter((item) => item.cartId !== cartId).map((item) =>
+          item.cartId === targetId
+            ? { ...item, quantity: item.quantity + source.quantity }
+            : item
+        );
+      }
+      return previous.map((item) => item.cartId === cartId
+        ? { ...item, cartId: targetId, orderType }
+        : item);
+    });
     setSuccess("");
   };
 
@@ -258,6 +280,10 @@ export default function POS() {
             );
           }
 
+          const usedIngredients = ingredients.filter((ingredient) =>
+            !(cartItem.orderType === "Dine In" && ingredient.excludeWhenDineIn === true)
+          );
+
           const priceCents = Math.round(price * 100);
           const lineTotalCents = priceCents * saleQuantity;
           currentSubtotalCents += lineTotalCents;
@@ -268,7 +294,8 @@ export default function POS() {
             price: priceCents / 100,
             quantity: saleQuantity,
             lineTotal: lineTotalCents / 100,
-            ingredients: ingredients.map((ingredient) => ({
+            orderType: cartItem.orderType,
+            ingredients: usedIngredients.map((ingredient) => ({
               id: ingredient.id,
               itemName: ingredient.itemName || "",
               quantity: Number(ingredient.quantity),
@@ -276,7 +303,7 @@ export default function POS() {
             })),
           });
 
-          ingredients.forEach((ingredient) => {
+          usedIngredients.forEach((ingredient) => {
             const requiredQuantity =
               Number(ingredient.quantity) * saleQuantity;
 
@@ -507,17 +534,26 @@ export default function POS() {
           ) : (
             <div className="pos-cart-list">
               {cart.map((item) => (
-                <div className="pos-cart-item" key={item.id}>
+                <div className="pos-cart-item" key={item.cartId}>
                   <div className="pos-cart-item-info">
                     <strong>{item.productName}</strong>
                     <small>{money(item.price)} each</small>
                     <b>{money(item.price * item.quantity)}</b>
+                    <label className="pos-order-type">
+                      Order type
+                      <select value={item.orderType}
+                        onChange={(e) => changeOrderType(item.cartId, e.target.value)}
+                        disabled={saving}>
+                        <option value="Take Out">Take Out</option>
+                        <option value="Dine In">Dine In</option>
+                      </select>
+                    </label>
                   </div>
 
                   <div className="pos-cart-controls">
                     <button
                       type="button"
-                      onClick={() => updateCartQuantity(item.id, -1)}
+                      onClick={() => updateCartQuantity(item.cartId, -1)}
                       disabled={saving}
                     >
                       −
@@ -525,7 +561,7 @@ export default function POS() {
                     <span>{item.quantity}</span>
                     <button
                       type="button"
-                      onClick={() => updateCartQuantity(item.id, 1)}
+                      onClick={() => updateCartQuantity(item.cartId, 1)}
                       disabled={saving}
                     >
                       +
@@ -533,7 +569,7 @@ export default function POS() {
                     <button
                       type="button"
                       className="pos-remove-btn"
-                      onClick={() => removeFromCart(item.id)}
+                      onClick={() => removeFromCart(item.cartId)}
                       disabled={saving}
                       title="Remove item"
                     >
