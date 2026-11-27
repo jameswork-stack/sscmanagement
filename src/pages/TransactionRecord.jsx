@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import "./TransactionRecord.css";
+import { jsPDF } from "jspdf";
 
 const formatMoney = (amount) =>
   `₱${Number(amount || 0).toLocaleString("en-PH", {
@@ -38,6 +39,70 @@ const formatDate = (timestamp) => {
     minute: "2-digit",
   });
 };
+
+// Thermal receipt settings (change to 58 for a 58mm printer).
+const RECEIPT_WIDTH = 58;
+const RECEIPT_NAME = "Sureshots Coffee";
+
+function createReceiptPDF(record) {
+  const margin = 4;
+  const width = RECEIPT_WIDTH - margin * 2;
+  const options = { unit: "mm", format: [RECEIPT_WIDTH, 200] };
+  const measure = new jsPDF(options);
+  const lines = [];
+  const money = (value) => Number(value ?? 0).toLocaleString("en-PH", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+  const add = (value, size = 9, bold = false, center = false) => {
+    measure.setFont("helvetica", bold ? "bold" : "normal");
+    measure.setFontSize(size);
+    const wrapped = measure.splitTextToSize(String(value), width);
+    wrapped.forEach((text) => lines.push({ text, size, bold, center, height: size * 0.46 + 0.7 }));
+  };
+  const rule = () => lines.push({ rule: true, height: 3 });
+  const amount = (label, value) => add(`${label}: PHP ${money(value)}`);
+  add(RECEIPT_NAME, 13, true, true);
+  add("Sales Receipt", 10, false, true);
+  rule();
+  add(`Transaction: #${record.id}`);
+  add(`Date: ${formatDate(record.createdAt)}`);
+  add(`Customer: ${record.customerName || "Walk-in Customer"}`);
+  add(`Payment: ${record.paymentMethod || "Unknown"}`);
+  rule();
+  (record.items || []).forEach((item) => {
+    add(item.productName || "Product", 10, true);
+    if (item.orderType) add(item.orderType, 8);
+    add(`${item.quantity} x ${money(item.price)} = ${money(item.lineTotal ?? item.quantity * item.price)}`);
+  });
+  rule();
+  amount("Subtotal", record.subtotal ?? (record.items || []).reduce((sum, item) => sum + Number(item.lineTotal ?? item.quantity * item.price), 0));
+  amount(`Discount (${record.discountPercent || 0}%)`, record.discountAmount);
+  add(`TOTAL: PHP ${money(record.totalAmount)}`, 12, true);
+  if (record.paymentMethod === "Cash") {
+    amount("Cash Received", record.amountReceived);
+    amount("Change", record.change);
+  }
+  if (record.paymentMethod === "Loan") amount("Remaining Balance", record.balanceDue);
+  add(`Status: ${record.paymentStatus || (record.paymentMethod === "Loan" ? "UNPAID" : "PAID")}`);
+  rule();
+  add("Thank you for your purchase!", 9, false, true);
+  add("Please come again.", 8, false, true);
+  const height = Math.max(80, Math.ceil(lines.reduce((sum, line) => sum + line.height, 0) + 12));
+  const pdf = new jsPDF({ unit: "mm", format: [RECEIPT_WIDTH, height], orientation: "portrait" });
+  let y = 5;
+  lines.forEach((line) => {
+    if (line.rule) {
+      pdf.setLineWidth(0.2);
+      pdf.line(margin, y + 1, RECEIPT_WIDTH - margin, y + 1);
+    } else {
+      pdf.setFont("helvetica", line.bold ? "bold" : "normal");
+      pdf.setFontSize(line.size);
+      pdf.text(line.text, line.center ? RECEIPT_WIDTH / 2 : margin, y + line.size * 0.36, { align: line.center ? "center" : "left" });
+    }
+    y += line.height;
+  });
+  return pdf;
+}
 
 export default function TransactionRecord() {
   const [transactions, setTransactions] = useState([]);
@@ -268,7 +333,7 @@ const toggleActionMenu = (event, transactionId) => {
 
   const rect = event.currentTarget.getBoundingClientRect();
   const menuWidth = 160;
-  const menuHeight = isAdmin ? 100 : 52;
+  const menuHeight = isAdmin ? 200 : 152;
 
   const top =
     rect.bottom + menuHeight + 8 > window.innerHeight
@@ -316,6 +381,33 @@ useEffect(() => {
     window.removeEventListener("resize", closeActionMenu);
   };
 }, [activeMenu]);
+
+const handleReceipt = (transactionId, action) => {
+  const record = transactions.find((item) => item.id === transactionId);
+  closeActionMenu();
+  if (!record) { setError("Transaction not found."); return; }
+  setError("");
+  try {
+    const pdf = createReceiptPDF(record);
+    if (action === "save") {
+      pdf.save(`Receipt-${record.id}.pdf`);
+    } else {
+      pdf.autoPrint();
+      const url = pdf.output("bloburl");
+      const printWindow = window.open(url, "_blank");
+      if (!printWindow) {
+        URL.revokeObjectURL(url);
+        setError("Allow popups to print the receipt, or use Save PDF.");
+      } else {
+        printWindow.opener = null;
+        window.setTimeout(() => URL.revokeObjectURL(url), 300000);
+      }
+    }
+  } catch (err) {
+    console.error("Receipt error:", err);
+    setError("Unable to generate the receipt.");
+  }
+};
 
 const handleRemoveTransaction = async (transactionId) => {
   if (!isAdmin || removingId) return;
@@ -643,6 +735,13 @@ const handleRemoveTransaction = async (transactionId) => {
       >
         <span>◉</span>
         View Details
+      </button>
+
+      <button type="button" onClick={() => handleReceipt(activeMenu, "print")}>
+        <span>▤</span> Print Receipt
+      </button>
+      <button type="button" onClick={() => handleReceipt(activeMenu, "save")}>
+        <span>↓</span> Save PDF
       </button>
 
       {isAdmin && (
